@@ -412,7 +412,7 @@ export default function Home() {
             <div className="stats-card">
               <div className="arrecadado-label">Arrecadado</div>
               <div className="arrecadado-valor">{formatCurrency(stats.total)}</div>
-              
+
               <div className="meta-valor">
                 Meta de <strong>{formatCurrency(goalAmount)}</strong>
               </div>
@@ -425,6 +425,37 @@ export default function Home() {
                 <span className="stats-meta-pct">{progressPct.toFixed(1)}% alcançado</span>
                 <span>{stats.count} contribuições</span>
               </div>
+
+              {/* Falta para a meta */}
+              {goalAmount > 0 && stats.total < goalAmount && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  background: 'rgba(35,170,89,0.08)', border: '1px solid rgba(35,170,89,0.2)',
+                  borderRadius: 'var(--radius)', padding: '0.65rem 0.9rem', marginTop: '0.75rem'
+                }}>
+                  <span style={{ fontSize: '1.1rem' }}>🎯</span>
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--vk-gray)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Falta para a meta</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--vk-green)' }}>
+                      {formatCurrency(goalAmount - stats.total)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Meta atingida */}
+              {goalAmount > 0 && stats.total >= goalAmount && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  background: 'rgba(35,170,89,0.12)', border: '1px solid var(--vk-green)',
+                  borderRadius: 'var(--radius)', padding: '0.65rem 0.9rem', marginTop: '0.75rem'
+                }}>
+                  <span style={{ fontSize: '1.3rem' }}>🎉</span>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--vk-green)' }}>
+                    Meta atingida! Obrigado!
+                  </div>
+                </div>
+              )}
 
               <button className="btn-contribuir" onClick={handleOpenModal}>
                 {campaign.cta_text || 'Apoiar esta campanha'}
@@ -446,6 +477,7 @@ export default function Home() {
               </div>
             </div>
           </aside>
+
         </div>
       </main>
 
