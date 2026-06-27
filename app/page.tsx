@@ -639,6 +639,15 @@ export default function Home() {
           © {new Date().getFullYear()} Corrente do Bem. Todos os direitos reservados.
         </div>
       </footer>
+
+      {/* BOTÃO FLUTUANTE MOBILE */}
+      {!isModalOpen && (
+        <div className="mobile-fab-wrap">
+          <button className="mobile-fab-btn" onClick={handleOpenModal}>
+            💚 {campaign.cta_text || 'Apoiar esta campanha'}
+          </button>
+        </div>
+      )}
     </>
   )
 }
