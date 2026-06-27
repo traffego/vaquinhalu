@@ -12,7 +12,12 @@ export async function GET(request: NextRequest) {
   }
   try {
     const { data, error } = await supabaseAdmin.from('campaign').select('*').single()
-    if (error) throw error
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json(null) // Tabela vazia
+      }
+      throw error
+    }
     return NextResponse.json(data)
   } catch (err: any) {
     console.error('campaign GET error:', err)
