@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface Campaign {
   name: string
@@ -50,19 +50,9 @@ function maskPhone(v: string) {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
 }
 
-const DEFAULT_CAMPAIGN: Campaign = {
-  name: 'Ajuda Lucianinha',
-  goal_amount: 15000,
-  story_title: 'Juntos pela cirurgia de recuperação da Lucianinha',
-  story_text: 'A Lucianinha é uma grande amiga de 40 anos que está enfrentando um momento delicado de saúde. Ela precisa realizar uma cirurgia essencial para garantir sua recuperação e qualidade de vida. Cada contribuição nesta corrente solidária faz uma diferença enorme para alcançarmos o valor necessário do procedimento médico. Agradecemos imensamente a todos pelo carinho e apoio.',
-  hero_image_url: null,
-  cta_text: 'Apoiar esta campanha',
-  suggested_values: '25,50,100,250',
-  status: 'active',
-}
-
 export default function Home() {
-  const [campaign, setCampaign] = useState<Campaign>(DEFAULT_CAMPAIGN)
+  const [campaign, setCampaign] = useState<Campaign | null>(null)
+  const [pageLoading, setPageLoading] = useState(true)
   const [stats, setStats] = useState<Stats>({ total: 0, count: 0 })
   const [donations, setDonations] = useState<Donation[]>([])
   
@@ -92,7 +82,7 @@ export default function Home() {
 
   // Obter array de imagens da campanha
   const getImages = (): string[] => {
-    if (!campaign.hero_image_url) return []
+    if (!campaign?.hero_image_url) return []
     try {
       const parsed = JSON.parse(campaign.hero_image_url)
       if (Array.isArray(parsed)) return parsed
@@ -145,35 +135,62 @@ export default function Home() {
   async function loadData() {
     try {
       const [campRes, donaRes] = await Promise.allSettled([
-        fetch('/api/public/campaign').then(async r => {
-          const json = await r.json()
-          console.log('[loadData] campaign response:', r.status, json)
-          return r.ok ? json : null
-        }).catch(err => { console.error('[loadData] campaign fetch error:', err); return null }),
-        fetch('/api/public/donations').then(async r => {
-          const json = await r.json()
-          console.log('[loadData] donations response:', r.status, json)
-          return r.ok ? json : null
-        }).catch(err => { console.error('[loadData] donations fetch error:', err); return null }),
+        fetch('/api/public/campaign').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/public/donations').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
 
       if (campRes.status === 'fulfilled' && campRes.value && !campRes.value.error) {
-        setCampaign(prev => ({ ...prev, ...campRes.value }))
+        setCampaign(campRes.value)
       }
       if (donaRes.status === 'fulfilled' && donaRes.value && !donaRes.value.error) {
         const d = donaRes.value
         setDonations(d.donations || [])
         setStats({ total: d.total || 0, count: d.count || 0 })
       }
-    } catch (e) { console.error('Erro ao carregar dados:', e) }
+    } catch (e) {
+      console.error('Erro ao carregar dados:', e)
+    } finally {
+      setPageLoading(false)
+    }
   }
 
-  const suggestedValues = campaign.suggested_values
+  const suggestedValues = campaign?.suggested_values
     ? campaign.suggested_values.split(',').map(Number).filter(Boolean)
     : [25, 50, 100, 250]
 
-  const goalAmount = campaign.goal_amount || 15000
-  const progressPct = Math.min((stats.total / goalAmount) * 100, 100)
+  const goalAmount = campaign?.goal_amount || 0
+  const progressPct = goalAmount > 0 ? Math.min((stats.total / goalAmount) * 100, 100) : 0
+
+  if (pageLoading) return (
+    <>
+      <header className="header">
+        <div className="header-container">
+          <a href="/" className="logo"><div className="logo-heart">✦</div>Corrente do Bem</a>
+          <a href="/admin/login" className="header-admin-btn">Acesso Restrito</a>
+        </div>
+      </header>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: 'var(--vk-gray)', flexDirection: 'column' }}>
+        <div className="pix-spinner" style={{ width: 36, height: 36 }} />
+        <span style={{ fontSize: '1rem' }}>Carregando campanha...</span>
+      </div>
+    </>
+  )
+
+  if (!campaign) return (
+    <>
+      <header className="header">
+        <div className="header-container">
+          <a href="/" className="logo"><div className="logo-heart">✦</div>Corrente do Bem</a>
+          <a href="/admin/login" className="header-admin-btn">Acesso Restrito</a>
+        </div>
+      </header>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', flexDirection: 'column', gap: '1rem', color: 'var(--vk-gray)', textAlign: 'center', padding: '2rem' }}>
+        <div style={{ fontSize: '3rem' }}>⚙️</div>
+        <h2 style={{ color: 'var(--vk-dark)' }}>Campanha ainda não configurada</h2>
+        <p>Acesse o <a href="/admin/campanha" style={{ color: 'var(--vk-green)', fontWeight: 600 }}>painel administrativo</a> para configurar a campanha.</p>
+      </div>
+    </>
+  )
 
   const getAmount = () => {
     if (selectedAmount) return selectedAmount
@@ -267,7 +284,7 @@ export default function Home() {
           <span className="campaign-id">Campanha Solidária</span>
         </div>
         
-        <h1 className="campaign-title">{campaign.story_title}</h1>
+        <h1 className="campaign-title">{campaign.story_title || campaign.name}</h1>
 
         <div className="campaign-grid">
           {/* LEFT COLUMN: Media, Share, Story & Contributors */}
