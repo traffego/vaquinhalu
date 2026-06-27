@@ -5,8 +5,7 @@ import { useState } from 'react'
 
 const navItems = [
   { href: '/admin/dashboard', icon: '📊', label: 'Dashboard' },
-  { href: '/admin/historia', icon: '💜', label: 'História & Foto' },
-  { href: '/admin/campanha', icon: '🎯', label: 'Configurar Campanha' },
+  { href: '/admin/campanha', icon: '🎯', label: 'Editar Campanha' },
   { href: '/admin/configuracoes', icon: '⚙️', label: 'MercadoPago' },
   { href: '/admin/doacoes', icon: '💰', label: 'Doações' },
 ]
