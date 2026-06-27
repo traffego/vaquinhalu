@@ -38,6 +38,14 @@ const TABS = [
   { key: 'rejected', label: '❌ Recusadas' },
 ]
 
+const STATUS_OPTIONS = [
+  { value: 'approved',  label: '✅ Aprovado' },
+  { value: 'pending',   label: '⏳ Pendente' },
+  { value: 'rejected',  label: '❌ Recusado' },
+  { value: 'cancelled', label: '❌ Cancelado' },
+  { value: 'refunded',  label: '↩️ Reembolsado' },
+]
+
 export default function AdminDoacoes() {
   const router = useRouter()
   const [donations, setDonations] = useState<Donation[]>([])
@@ -45,6 +53,8 @@ export default function AdminDoacoes() {
   const [tab, setTab] = useState('all')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState<string | null>(null)
+  const [toast, setToast] = useState('')
 
   const load = useCallback(async (t: string, p: number) => {
     setLoading(true)
@@ -53,13 +63,12 @@ export default function AdminDoacoes() {
       if (t !== 'all') params.set('status', t)
       const res = await fetch(`/api/admin/donations?${params}`)
       if (res.status === 401) { router.push('/admin/login'); return }
-      if (!res.ok) throw new Error('API de doações retornou erro')
+      if (!res.ok) throw new Error('Erro na API')
       const data = await res.json()
       setDonations(data.data || [])
       setCount(data.count || 0)
     } catch (err) {
       console.error(err)
-      alert('Erro ao carregar doações do banco de dados. Verifique a chave SUPABASE_SERVICE_ROLE_KEY no painel da Vercel.')
     } finally {
       setLoading(false)
     }
@@ -67,8 +76,27 @@ export default function AdminDoacoes() {
 
   useEffect(() => { load(tab, page) }, [tab, page, load])
 
-  function handleTabChange(t: string) {
-    setTab(t); setPage(1)
+  function handleTabChange(t: string) { setTab(t); setPage(1) }
+
+  async function handleStatusChange(id: string, newStatus: string) {
+    setUpdating(id)
+    try {
+      const res = await fetch(`/api/admin/donations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) throw new Error('Erro ao atualizar')
+      // Atualiza localmente sem recarregar a lista inteira
+      setDonations(prev => prev.map(d => d.id === id ? { ...d, status: newStatus } : d))
+      setToast(`Status atualizado para "${STATUS_OPTIONS.find(s => s.value === newStatus)?.label || newStatus}"`)
+      setTimeout(() => setToast(''), 3000)
+    } catch {
+      setToast('❌ Erro ao atualizar status')
+      setTimeout(() => setToast(''), 3000)
+    } finally {
+      setUpdating(null)
+    }
   }
 
   async function exportCsv() {
@@ -99,6 +127,19 @@ export default function AdminDoacoes() {
 
   return (
     <>
+      {/* Toast de feedback */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: '1rem', right: '1rem', zIndex: 9999,
+          background: toast.startsWith('❌') ? '#dc2626' : 'var(--vk-green)',
+          color: '#fff', padding: '0.8rem 1.4rem', borderRadius: 'var(--radius)',
+          fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          {toast}
+        </div>
+      )}
+
       <div className="admin-topbar">
         <h1 className="admin-page-title">💰 Doações ({count})</h1>
         <button className="btn btn-outline btn-sm" onClick={exportCsv}>📥 Exportar CSV</button>
@@ -124,10 +165,9 @@ export default function AdminDoacoes() {
               <thead>
                 <tr>
                   <th>Doador</th>
-                  <th>Email</th>
                   <th>Valor</th>
-                  <th>Método</th>
                   <th>Status</th>
+                  <th>Alterar Status</th>
                   <th>Mensagem</th>
                   <th>Data</th>
                 </tr>
@@ -139,15 +179,66 @@ export default function AdminDoacoes() {
                       <div style={{ fontWeight: 600 }}>
                         {d.anonymous ? '🔒 Anônimo' : d.donor_name}
                       </div>
+                      {d.donor_email && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--vk-gray)' }}>{d.donor_email}</div>
+                      )}
                       {d.mp_payment_id && (
-                        <div style={{ fontSize: '0.72rem', color: 'var(--gray-400)' }}>MP: {d.mp_payment_id}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--gray-400)', fontFamily: 'monospace' }}>
+                          MP: {d.mp_payment_id}
+                        </div>
                       )}
                     </td>
-                    <td style={{ color: 'var(--gray-500)', fontSize: '0.875rem' }}>{d.donor_email || '—'}</td>
-                    <td style={{ fontWeight: 700, color: 'var(--purple-600)' }}>{formatCurrency(d.amount)}</td>
-                    <td style={{ fontSize: '0.875rem', color: 'var(--gray-500)' }}>{d.mp_payment_method || '—'}</td>
+                    <td style={{ fontWeight: 700, color: 'var(--vk-green)', whiteSpace: 'nowrap' }}>
+                      {formatCurrency(d.amount)}
+                    </td>
                     <td><StatusBadge status={d.status} /></td>
-                    <td style={{ maxWidth: 180, fontSize: '0.85rem', color: 'var(--gray-600)' }}>
+                    <td>
+                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {d.status !== 'approved' && (
+                          <button
+                            onClick={() => handleStatusChange(d.id, 'approved')}
+                            disabled={updating === d.id}
+                            style={{
+                              background: 'var(--vk-green)', color: '#fff',
+                              border: 'none', borderRadius: 'var(--radius-sm)',
+                              padding: '0.3rem 0.7rem', fontSize: '0.78rem',
+                              fontWeight: 700, cursor: 'pointer', opacity: updating === d.id ? 0.6 : 1
+                            }}
+                          >
+                            {updating === d.id ? '...' : '✅ Confirmar'}
+                          </button>
+                        )}
+                        {d.status !== 'pending' && (
+                          <button
+                            onClick={() => handleStatusChange(d.id, 'pending')}
+                            disabled={updating === d.id}
+                            style={{
+                              background: '#d97706', color: '#fff',
+                              border: 'none', borderRadius: 'var(--radius-sm)',
+                              padding: '0.3rem 0.7rem', fontSize: '0.78rem',
+                              fontWeight: 700, cursor: 'pointer', opacity: updating === d.id ? 0.6 : 1
+                            }}
+                          >
+                            ⏳ Pendente
+                          </button>
+                        )}
+                        {d.status !== 'cancelled' && (
+                          <button
+                            onClick={() => handleStatusChange(d.id, 'cancelled')}
+                            disabled={updating === d.id}
+                            style={{
+                              background: '#dc2626', color: '#fff',
+                              border: 'none', borderRadius: 'var(--radius-sm)',
+                              padding: '0.3rem 0.7rem', fontSize: '0.78rem',
+                              fontWeight: 700, cursor: 'pointer', opacity: updating === d.id ? 0.6 : 1
+                            }}
+                          >
+                            ❌ Cancelar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ maxWidth: 180, fontSize: '0.85rem', color: 'var(--vk-gray)' }}>
                       {d.message ? `"${d.message.slice(0, 60)}${d.message.length > 60 ? '…' : ''}"` : '—'}
                     </td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--gray-400)', whiteSpace: 'nowrap' }}>
@@ -158,7 +249,7 @@ export default function AdminDoacoes() {
                 ))}
                 {donations.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-400)' }}>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-400)' }}>
                       Nenhuma doação encontrada 💜
                     </td>
                   </tr>
@@ -168,11 +259,10 @@ export default function AdminDoacoes() {
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
             <button className="btn btn-outline btn-sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Anterior</button>
-            <span style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--gray-600)' }}>
+            <span style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color: 'var(--vk-gray)' }}>
               Página {page} de {totalPages}
             </span>
             <button className="btn btn-outline btn-sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Próxima →</button>
