@@ -48,14 +48,21 @@ export default function AdminDoacoes() {
 
   const load = useCallback(async (t: string, p: number) => {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(p) })
-    if (t !== 'all') params.set('status', t)
-    const res = await fetch(`/api/admin/donations?${params}`)
-    if (res.status === 401) { router.push('/admin/login'); return }
-    const data = await res.json()
-    setDonations(data.data || [])
-    setCount(data.count || 0)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(p) })
+      if (t !== 'all') params.set('status', t)
+      const res = await fetch(`/api/admin/donations?${params}`)
+      if (res.status === 401) { router.push('/admin/login'); return }
+      if (!res.ok) throw new Error('API de doações retornou erro')
+      const data = await res.json()
+      setDonations(data.data || [])
+      setCount(data.count || 0)
+    } catch (err) {
+      console.error(err)
+      alert('Erro ao carregar doações do banco de dados. Verifique a chave SUPABASE_SERVICE_ROLE_KEY no painel da Vercel.')
+    } finally {
+      setLoading(false)
+    }
   }, [router])
 
   useEffect(() => { load(tab, page) }, [tab, page, load])
@@ -107,7 +114,10 @@ export default function AdminDoacoes() {
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--gray-400)' }}>💜 Carregando...</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', gap: '0.8rem', color: 'var(--vk-gray)' }}>
+            <div className="pix-spinner" style={{ width: 24, height: 24 }} />
+            <span>Carregando doações...</span>
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table">

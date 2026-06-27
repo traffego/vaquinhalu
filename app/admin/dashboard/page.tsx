@@ -80,11 +80,9 @@ export default function AdminDashboard() {
   const progressPct = stats ? Math.min((stats.total / goalAmount) * 100, 100) : 0
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>💜</div>
-        <p style={{ color: 'var(--gray-500)' }}>Carregando dados...</p>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: '0.8rem', color: 'var(--vk-gray)' }}>
+      <div className="pix-spinner" style={{ width: 24, height: 24 }} />
+      <span>Carregando dados do painel...</span>
     </div>
   )
 
@@ -99,28 +97,28 @@ export default function AdminDashboard() {
 
       {/* Stats */}
       <div className="stats-grid">
-        <div className="stat-card">
+        <div className="stat-card" style={{ borderLeftColor: 'var(--vk-green)' }}>
           <span className="stat-card-icon">💰</span>
           <div>
             <div className="stat-card-val">{formatCurrency(stats?.total || 0)}</div>
             <div className="stat-card-lbl">Total arrecadado</div>
           </div>
         </div>
-        <div className="stat-card" style={{ borderLeftColor: 'var(--pink-500)' }}>
+        <div className="stat-card" style={{ borderLeftColor: '#0ea5e9' }}>
           <span className="stat-card-icon">👥</span>
           <div>
             <div className="stat-card-val">{stats?.count || 0}</div>
             <div className="stat-card-lbl">Doadores</div>
           </div>
         </div>
-        <div className="stat-card" style={{ borderLeftColor: 'var(--gold)' }}>
+        <div className="stat-card" style={{ borderLeftColor: '#d97706' }}>
           <span className="stat-card-icon">🎯</span>
           <div>
             <div className="stat-card-val">{formatCurrency(goalAmount)}</div>
             <div className="stat-card-lbl">Meta da campanha</div>
           </div>
         </div>
-        <div className="stat-card" style={{ borderLeftColor: '#22c55e' }}>
+        <div className="stat-card" style={{ borderLeftColor: 'var(--vk-green)' }}>
           <span className="stat-card-icon">📈</span>
           <div>
             <div className="stat-card-val">{progressPct.toFixed(1)}%</div>
@@ -132,14 +130,14 @@ export default function AdminDashboard() {
       {/* Progress bar */}
       <div className="admin-card">
         <div className="admin-card-title">Progresso da Campanha</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--gray-600)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.875rem', color: 'var(--vk-gray)' }}>
           <span>{formatCurrency(stats?.total || 0)} arrecadados</span>
           <span>Meta: {formatCurrency(goalAmount)}</span>
         </div>
-        <div className="progress-bar-wrap" style={{ height: '16px' }}>
-          <div className="progress-bar-fill" style={{ width: `${progressPct}%` }} />
+        <div className="vk-progress-bar" style={{ height: '14px' }}>
+          <div className="vk-progress-fill" style={{ width: `${progressPct}%` }} />
         </div>
-        <p style={{ textAlign: 'right', marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--purple-600)', fontWeight: 600 }}>
+        <p style={{ textAlign: 'right', marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--vk-green)', fontWeight: 700 }}>
           {progressPct.toFixed(1)}% da meta
         </p>
       </div>
@@ -163,16 +161,16 @@ export default function AdminDashboard() {
             <tbody>
               {donations.slice(0, 8).map(d => (
                 <tr key={d.id}>
-                  <td>{d.anonymous ? 'Anônimo 💜' : d.donor_name}</td>
-                  <td style={{ fontWeight: 600, color: 'var(--purple-600)' }}>{formatCurrency(d.amount)}</td>
+                  <td>{d.anonymous ? 'Anônimo' : d.donor_name}</td>
+                  <td style={{ fontWeight: 700, color: 'var(--vk-green)' }}>{formatCurrency(d.amount)}</td>
                   <td>{statusBadge(d.status)}</td>
-                  <td style={{ color: 'var(--gray-400)', fontSize: '0.8rem' }}>
+                  <td style={{ color: 'var(--vk-gray)', fontSize: '0.8rem' }}>
                     {new Date(d.created_at).toLocaleDateString('pt-BR')}
                   </td>
                 </tr>
               ))}
               {donations.length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--gray-400)', padding: '2rem' }}>Nenhuma doação ainda 💜</td></tr>
+                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--vk-gray)', padding: '2rem' }}>Nenhuma doação recebida ainda.</td></tr>
               )}
             </tbody>
           </table>

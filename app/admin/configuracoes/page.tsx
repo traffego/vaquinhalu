@@ -17,13 +17,20 @@ export default function AdminConfiguracoes() {
   useEffect(() => { loadConfig() }, [])
 
   async function loadConfig() {
-    const res = await fetch('/api/admin/config')
-    if (res.status === 401) { router.push('/admin/login'); return }
-    const data = await res.json()
-    setMpAccessTokenMasked(data.mp_access_token_masked || '')
-    setMpPublicKey(data.mp_public_key || '')
-    setMpMode(data.mp_mode || 'sandbox')
-    setLoading(false)
+    try {
+      const res = await fetch('/api/admin/config')
+      if (res.status === 401) { router.push('/admin/login'); return }
+      if (!res.ok) throw new Error('API retornou erro')
+      const data = await res.json()
+      setMpAccessTokenMasked(data.mp_access_token_masked || '')
+      setMpPublicKey(data.mp_public_key || '')
+      setMpMode(data.mp_mode || 'sandbox')
+    } catch (err: any) {
+      console.error(err)
+      setError('Erro ao carregar configurações do banco de dados. Verifique a chave SUPABASE_SERVICE_ROLE_KEY no painel da Vercel.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -49,7 +56,12 @@ export default function AdminConfiguracoes() {
     }
   }
 
-  if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>💜 Carregando...</div>
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: '0.8rem', color: 'var(--vk-gray)' }}>
+      <div className="pix-spinner" style={{ width: 24, height: 24 }} />
+      <span>Carregando configurações...</span>
+    </div>
+  )
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
 

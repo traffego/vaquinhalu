@@ -16,18 +16,25 @@ export default function AdminHistoria() {
   useEffect(() => { loadData() }, [])
 
   async function loadData() {
-    const res = await fetch('/api/admin/campaign')
-    if (res.status === 401) { router.push('/admin/login'); return }
-    const data = await res.json()
-    if (data) {
-      setForm({
-        story_title: data.story_title || '',
-        story_text: data.story_text || '',
-        hero_image_url: data.hero_image_url || '',
-      })
-      setPreviewUrl(data.hero_image_url || '')
+    try {
+      const res = await fetch('/api/admin/campaign')
+      if (res.status === 401) { router.push('/admin/login'); return }
+      if (!res.ok) throw new Error('API retornou erro')
+      const data = await res.json()
+      if (data) {
+        setForm({
+          story_title: data.story_title || '',
+          story_text: data.story_text || '',
+          hero_image_url: data.hero_image_url || '',
+        })
+        setPreviewUrl(data.hero_image_url || '')
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError('Erro ao carregar história do banco de dados. Verifique a chave SUPABASE_SERVICE_ROLE_KEY no painel da Vercel.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -95,7 +102,12 @@ export default function AdminHistoria() {
     }
   }
 
-  if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>💜 Carregando...</div>
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: '0.8rem', color: 'var(--vk-gray)' }}>
+      <div className="pix-spinner" style={{ width: 24, height: 24 }} />
+      <span>Carregando história...</span>
+    </div>
+  )
 
   return (
     <>

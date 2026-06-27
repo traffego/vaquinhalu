@@ -16,20 +16,27 @@ export default function AdminCampanha() {
   useEffect(() => { loadCampaign() }, [])
 
   async function loadCampaign() {
-    const res = await fetch('/api/admin/campaign')
-    if (res.status === 401) { router.push('/admin/login'); return }
-    const data = await res.json()
-    if (data) {
-      setForm({
-        name: data.name || '',
-        goal_amount: data.goal_amount ? String(data.goal_amount) : '',
-        deadline: data.deadline ? data.deadline.split('T')[0] : '',
-        status: data.status || 'active',
-        cta_text: data.cta_text || '',
-        suggested_values: data.suggested_values || '',
-      })
+    try {
+      const res = await fetch('/api/admin/campaign')
+      if (res.status === 401) { router.push('/admin/login'); return }
+      if (!res.ok) throw new Error('API retornou erro')
+      const data = await res.json()
+      if (data) {
+        setForm({
+          name: data.name || '',
+          goal_amount: data.goal_amount ? String(data.goal_amount) : '',
+          deadline: data.deadline ? data.deadline.split('T')[0] : '',
+          status: data.status || 'active',
+          cta_text: data.cta_text || '',
+          suggested_values: data.suggested_values || '',
+        })
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError('Erro ao conectar ao banco de dados. Verifique suas credenciais do Supabase no painel Vercel.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -54,7 +61,12 @@ export default function AdminCampanha() {
     }
   }
 
-  if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>💜 Carregando...</div>
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: '0.8rem', color: 'var(--vk-gray)' }}>
+      <div className="pix-spinner" style={{ width: 24, height: 24 }} />
+      <span>Carregando campanha...</span>
+    </div>
+  )
 
   return (
     <>
