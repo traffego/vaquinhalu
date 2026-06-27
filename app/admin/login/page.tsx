@@ -37,7 +37,7 @@ export default function AdminLogin() {
       <div className="admin-login-card">
         <div className="admin-login-logo">
           <div className="logo-mark">✦</div>
-          <h2 style={{ fontFamily: 'Cormorant Garamond, serif', color: 'var(--navy)', fontSize: '1.6rem', fontWeight: 600 }}>
+          <h2>
             Corrente do Bem
           </h2>
           <p style={{ color: 'var(--gray-400)', fontSize: '0.8125rem', marginTop: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
