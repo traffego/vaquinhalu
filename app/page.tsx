@@ -576,6 +576,19 @@ export default function Home() {
                     </button>
                   </div>
 
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '0.6rem',
+                    background: 'var(--vk-light-gray)', border: '1px solid var(--vk-border)',
+                    borderRadius: 'var(--radius)', padding: '0.7rem 1rem', marginTop: '1rem'
+                  }}>
+                    <span style={{ fontSize: '1.3rem' }}>🏦</span>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--vk-gray)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Conta de destino</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--vk-dark)' }}>JONATHAS QUINTANILHA (GARRÉ)</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--vk-gray)' }}>Mercado Pago</div>
+                    </div>
+                  </div>
+
                   <div className="pix-status-box">
                     <div className="pix-spinner" />
                     <span>Aguardando o pagamento...</span>
@@ -585,6 +598,7 @@ export default function Home() {
                   </p>
                 </div>
               )}
+
 
               {checkoutStep === 'success' && (
                 <div className="pix-success-box">
