@@ -87,6 +87,32 @@ export default function Home() {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
+  // Slideshow States
+  const [currentSlide, setCurrentSlide] = useState(0)
+
+  // Obter array de imagens da campanha
+  const getImages = (): string[] => {
+    if (!campaign.hero_image_url) return []
+    try {
+      const parsed = JSON.parse(campaign.hero_image_url)
+      if (Array.isArray(parsed)) return parsed
+      return [campaign.hero_image_url]
+    } catch {
+      return [campaign.hero_image_url]
+    }
+  }
+
+  const images = getImages()
+
+  // Autoplay para os slides
+  useEffect(() => {
+    if (images.length <= 1) return
+    const interval = setInterval(() => {
+      setCurrentSlide(prev => (prev + 1) % images.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [images])
+
   useEffect(() => { loadData() }, [])
 
   // Monitor de status do Pix (Polling)
@@ -239,8 +265,47 @@ export default function Home() {
           {/* LEFT COLUMN: Media, Share, Story & Contributors */}
           <div>
             <div className="media-container">
-              {campaign.hero_image_url ? (
-                <img src={campaign.hero_image_url} alt="Campanha Lucianinha" />
+              {images.length > 0 ? (
+                <div className="slider-container">
+                  {images.map((url, idx) => (
+                    <div
+                      key={idx}
+                      className={`slide-item${currentSlide === idx ? ' active' : ''}`}
+                    >
+                      <img src={url} alt={`Foto Lucianinha ${idx + 1}`} />
+                    </div>
+                  ))}
+                  
+                  {images.length > 1 && (
+                    <>
+                      <button
+                        className="slider-btn slider-btn-prev"
+                        onClick={() => setCurrentSlide(prev => (prev - 1 + images.length) % images.length)}
+                        title="Foto anterior"
+                      >
+                        &#10094;
+                      </button>
+                      <button
+                        className="slider-btn slider-btn-next"
+                        onClick={() => setCurrentSlide(prev => (prev + 1) % images.length)}
+                        title="Próxima foto"
+                      >
+                        &#10095;
+                      </button>
+                      
+                      <div className="slider-dots">
+                        {images.map((_, idx) => (
+                          <button
+                            key={idx}
+                            className={`slider-dot${currentSlide === idx ? ' active' : ''}`}
+                            onClick={() => setCurrentSlide(idx)}
+                            title={`Ir para foto ${idx + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               ) : (
                 <div className="media-placeholder">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
