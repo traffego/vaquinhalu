@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 interface Campaign {
   name: string
@@ -34,21 +34,30 @@ function formatCurrency(value: number) {
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}min atrás`
+  if (mins < 1) return 'Agora mesmo'
+  if (mins < 60) return `${mins} min atrás`
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h atrás`
-  return `${Math.floor(hrs / 24)}d atrás`
+  if (hrs < 24) return `${hrs} h atrás`
+  return `${Math.floor(hrs / 24)} d atrás`
 }
 
-// Dados padrão — página carrega imediatamente sem travar
+// Máscara simples para WhatsApp: (99) 99999-9999
+function maskPhone(v: string) {
+  const digits = v.replace(/\D/g, '')
+  if (digits.length <= 2) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+}
+
 const DEFAULT_CAMPAIGN: Campaign = {
   name: 'Ajuda Lucianinha',
   goal_amount: 15000,
-  story_title: 'Juntos pela Lucianinha',
-  story_text: 'A Lucianinha é uma pessoa incrível que encheu nossas vidas de alegria e carinho. Agora ela precisa de nós. Ela está enfrentando um momento muito difícil e precisa realizar uma cirurgia para recuperar sua saúde e qualidade de vida. Cada contribuição, por menor que seja, faz uma diferença enorme. Seja parte dessa corrente do bem e ajude nossa querida amiga a sorrir novamente.',
+  story_title: 'Juntos pela cirurgia de recuperação da Lucianinha',
+  story_text: 'A Lucianinha é uma grande amiga de 40 anos que está enfrentando um momento delicado de saúde. Ela precisa realizar uma cirurgia essencial para garantir sua recuperação e qualidade de vida. Cada contribuição nesta corrente solidária faz uma diferença enorme para alcançarmos o valor necessário do procedimento médico. Agradecemos imensamente a todos pelo carinho e apoio.',
   hero_image_url: null,
-  cta_text: 'Quero contribuir',
-  suggested_values: '10,25,50,100,200,500',
+  cta_text: 'Apoiar esta campanha',
+  suggested_values: '25,50,100,250',
   status: 'active',
 }
 
@@ -56,30 +65,65 @@ export default function Home() {
   const [campaign, setCampaign] = useState<Campaign>(DEFAULT_CAMPAIGN)
   const [stats, setStats] = useState<Stats>({ total: 0, count: 0 })
   const [donations, setDonations] = useState<Donation[]>([])
-  const [mpMode, setMpMode] = useState('sandbox')
+  
+  // Tabs: 'historia' | 'apoiadores'
+  const [activeTab, setActiveTab] = useState<'historia' | 'apoiadores'>('historia')
 
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null)
+  // Modal Control
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(25)
   const [customAmount, setCustomAmount] = useState('')
   const [donorName, setDonorName] = useState('')
-  const [donorEmail, setDonorEmail] = useState('')
+  const [donorPhone, setDonorPhone] = useState('')
   const [message, setMessage] = useState('')
   const [anonymous, setAnonymous] = useState(false)
+  
+  // Checkout States
+  const [checkoutStep, setCheckoutStep] = useState<'form' | 'pix' | 'success'>('form')
+  const [qrCode, setQrCode] = useState('')
+  const [qrCodeBase64, setQrCodeBase64] = useState('')
+  const [currentDonationId, setCurrentDonationId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
-  const donationRef = useRef<HTMLElement>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
+  // Monitor de status do Pix (Polling)
+  useEffect(() => {
+    if (checkoutStep !== 'pix' || !currentDonationId) return
+
+    let intervalId: NodeJS.Timeout
+
+    const checkStatus = async () => {
+      try {
+        const res = await fetch(`/api/payment/status?donationId=${currentDonationId}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === 'approved') {
+            setCheckoutStep('success')
+            loadData() // Recarrega estatísticas e doações
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao verificar status do pagamento:', err)
+      }
+    }
+
+    // Checa a cada 3 segundos
+    intervalId = setInterval(checkStatus, 3000)
+
+    return () => clearInterval(intervalId)
+  }, [checkoutStep, currentDonationId])
+
   async function loadData() {
     try {
-      const [campRes, donaRes, configRes] = await Promise.allSettled([
+      const [campRes, donaRes] = await Promise.allSettled([
         fetch('/api/public/campaign').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/public/donations').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/public/config').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
 
-      if (campRes.status === 'fulfilled' && campRes.value) {
+      if (campRes.status === 'fulfilled' && campRes.value && Object.keys(campRes.value).length > 0) {
         setCampaign(prev => ({ ...prev, ...campRes.value }))
       }
       if (donaRes.status === 'fulfilled' && donaRes.value) {
@@ -87,16 +131,12 @@ export default function Home() {
         setDonations(d.donations || [])
         setStats({ total: d.total || 0, count: d.count || 0 })
       }
-      if (configRes.status === 'fulfilled' && configRes.value) {
-        const c = configRes.value
-        setMpMode(c.mp_mode || 'sandbox')
-      }
-    } catch (e) { console.error('loadData error:', e) }
+    } catch (e) { console.error('Erro ao carregar dados:', e) }
   }
 
   const suggestedValues = campaign.suggested_values
     ? campaign.suggested_values.split(',').map(Number).filter(Boolean)
-    : [10, 25, 50, 100, 200, 500]
+    : [25, 50, 100, 250]
 
   const goalAmount = campaign.goal_amount || 15000
   const progressPct = Math.min((stats.total / goalAmount) * 100, 100)
@@ -107,297 +147,392 @@ export default function Home() {
     return 0
   }
 
-  async function handleDonate(e: React.FormEvent) {
+  async function handleGeneratePix(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     const amount = getAmount()
-    if (!amount || amount < 1) { setError('Informe um valor válido (mínimo R$ 1,00)'); return }
-    if (!donorName.trim()) { setError('Informe seu nome'); return }
+    if (!amount || amount < 1) { setError('O valor mínimo de contribuição é R$ 1,00.'); return }
+    if (!donorName.trim()) { setError('Preencha seu nome completo.'); return }
+    if (donorPhone.replace(/\D/g, '').length < 10) { setError('Digite um número de WhatsApp válido.'); return }
 
     setLoading(true)
     try {
       const res = await fetch('/api/payment/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ donorName, donorEmail, amount, message, anonymous }),
+        body: JSON.stringify({
+          donorName,
+          donorPhone,
+          amount,
+          message,
+          anonymous,
+        }),
       })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Erro ao processar doação'); return }
 
-      const url = mpMode === 'sandbox' ? data.sandboxInitPoint : data.initPoint
-      if (url) window.location.href = url
-      else setError('Gateway de pagamento não configurado. Entre em contato com o administrador.')
-    } catch {
-      setError('Erro de conexão. Tente novamente.')
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Erro ao gerar o PIX. Tente novamente mais tarde.')
+        return
+      }
+
+      setQrCode(data.qrCode)
+      setQrCodeBase64(data.qrCodeBase64)
+      setCurrentDonationId(data.donationId)
+      setCheckoutStep('pix')
+    } catch (err) {
+      setError('Erro de conexão. Verifique sua internet e tente novamente.')
     } finally {
       setLoading(false)
     }
   }
 
+  function handleCopyPix() {
+    if (!qrCode) return
+    navigator.clipboard.writeText(qrCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleOpenModal() {
+    setCheckoutStep('form')
+    setSelectedAmount(25)
+    setCustomAmount('')
+    setDonorName('')
+    setDonorPhone('')
+    setMessage('')
+    setAnonymous(false)
+    setError('')
+    setIsModalOpen(true)
+  }
+
+  function handleShareLink() {
+    const url = window.location.href
+    navigator.clipboard.writeText(url)
+    alert('Link da campanha copiado para a área de transferência!')
+  }
+
   return (
     <>
-      {/* HERO */}
-      <section className="hero">
-        <nav className="hero-nav">
-          <div className="hero-logo">
-            <div className="hero-logo-mark">✦</div>
+      {/* HEADER */}
+      <header className="header">
+        <div className="header-container">
+          <a href="/" className="logo">
+            <div className="logo-heart">✦</div>
             Corrente do Bem
-          </div>
-          <button
-            className="btn btn-outline-light btn-sm"
-            onClick={() => donationRef.current?.scrollIntoView({ behavior: 'smooth' })}
-          >
-            Fazer uma Doação
-          </button>
-        </nav>
+          </a>
+          <a href="/admin/login" className="header-admin-btn">
+            Acesso Restrito
+          </a>
+        </div>
+      </header>
 
-        <div className="hero-content">
-          <div className="hero-inner">
-            <div className="hero-text">
-              <div className="hero-eyebrow">
-                <span className="hero-eyebrow-line" />
-                Campanha de Solidariedade
-              </div>
-              <h1 className="hero-title">
-                {campaign.story_title || <>Juntos pela<br /><em>Lucianinha</em></>}
-              </h1>
-              <p className="hero-subtitle">
-                Sua contribuição, independentemente do valor, representa um ato de amor
-                que pode transformar a vida de alguém muito especial.
-              </p>
-              <div className="hero-actions">
-                <button
-                  className="btn btn-gold btn-lg"
-                  onClick={() => donationRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                >
-                  {campaign.cta_text || 'Quero Contribuir'}
-                </button>
-                <button
-                  className="btn btn-outline-light btn-lg"
-                  onClick={() => document.getElementById('historia')?.scrollIntoView({ behavior: 'smooth' })}
-                >
-                  Conheça a história
-                </button>
-              </div>
+      {/* MAIN WRAPPER */}
+      <main className="main-wrapper">
+        <div className="campaign-meta-top">
+          <span className="campaign-tag">Saúde & Cirurgia</span>
+          <span className="campaign-id">Campanha Solidária</span>
+        </div>
+        
+        <h1 className="campaign-title">{campaign.story_title}</h1>
+
+        <div className="campaign-grid">
+          {/* LEFT COLUMN: Media, Share, Story & Contributors */}
+          <div>
+            <div className="media-container">
+              {campaign.hero_image_url ? (
+                <img src={campaign.hero_image_url} alt="Campanha Lucianinha" />
+              ) : (
+                <div className="media-placeholder">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Imagem da Campanha</span>
+                </div>
+              )}
             </div>
 
-            <div className="hero-photo-wrap">
-              <div className="hero-photo-frame">
-                <div className="hero-photo-accent" />
-                <div className="hero-photo">
-                  {campaign.hero_image_url ? (
-                    <img src={campaign.hero_image_url} alt="Lucianinha" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {/* Share buttons */}
+            <div className="share-row">
+              <span className="share-label">Compartilhar:</span>
+              <a
+                href={`https://api.whatsapp.com/send?text=Olá! Veja essa campanha de arrecadação para ajudar na cirurgia da Lucianinha: ${typeof window !== 'undefined' ? encodeURIComponent(window.location.href) : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="share-btn share-btn-whatsapp"
+              >
+                Compartilhar no WhatsApp
+              </a>
+              <button onClick={handleShareLink} className="share-btn share-btn-copy">
+                Copiar Link
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="tabs-bar">
+              <button
+                className={`tab-button${activeTab === 'historia' ? ' active' : ''}`}
+                onClick={() => setActiveTab('historia')}
+              >
+                História
+              </button>
+              <button
+                className={`tab-button${activeTab === 'apoiadores' ? ' active' : ''}`}
+                onClick={() => setActiveTab('apoiadores')}
+              >
+                Apoiadores ({stats.count})
+              </button>
+            </div>
+
+            {/* Tab contents */}
+            <div className="story-box">
+              {activeTab === 'historia' ? (
+                <div className="story-text">
+                  {(campaign.story_text || '').split('\n').filter(Boolean).map((p, i) => (
+                    <p key={i}>{p}</p>
+                  ))}
+                </div>
+              ) : (
+                <div className="apoiadores-list">
+                  {donations.length > 0 ? (
+                    donations.map(d => (
+                      <div key={d.id} className="apoiador-card">
+                        <div className="apoiador-avatar">
+                          {(d.anonymous ? '?' : d.donor_name[0] || '?').toUpperCase()}
+                        </div>
+                        <div className="apoiador-info">
+                          <div className="apoiador-nome">{d.anonymous ? 'Apoiador Anônimo' : d.donor_name}</div>
+                          <div className="apoiador-valor">Contribuiu com {formatCurrency(d.amount)}</div>
+                          {d.message && <div className="apoiador-msg">"{d.message}"</div>}
+                          <div className="apoiador-data">{timeAgo(d.created_at)}</div>
+                        </div>
+                      </div>
+                    ))
                   ) : (
-                    <div className="hero-photo-placeholder">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      <span>Foto da Lucianinha</span>
-                    </div>
+                    <p style={{ textAlign: 'center', color: 'var(--vk-gray)', padding: '2rem 0' }}>
+                      Seja o primeiro a apoiar esta causa! Clique no botão ao lado.
+                    </p>
                   )}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Sidebar stats */}
+          <aside className="sidebar-sticky">
+            <div className="stats-card">
+              <div className="arrecadado-label">Arrecadado</div>
+              <div className="arrecadado-valor">{formatCurrency(stats.total)}</div>
+              
+              <div className="meta-valor">
+                Meta de <strong>{formatCurrency(goalAmount)}</strong>
+              </div>
+
+              <div className="vk-progress-bar">
+                <div className="vk-progress-fill" style={{ width: `${progressPct}%` }} />
+              </div>
+
+              <div className="stats-meta-row">
+                <span className="stats-meta-pct">{progressPct.toFixed(1)}% alcançado</span>
+                <span>{stats.count} contribuições</span>
+              </div>
+
+              <button className="btn-contribuir" onClick={handleOpenModal}>
+                {campaign.cta_text || 'Apoiar esta campanha'}
+              </button>
+
+              <div className="apoio-extra-box">
+                <div className="apoio-extra-item">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span>Doação via PIX 100% segura</span>
+                </div>
+                <div className="apoio-extra-item">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Todo o valor arrecadado cai direto na conta da cirurgia</span>
+                </div>
               </div>
             </div>
-          </div>
+          </aside>
         </div>
-      </section>
+      </main>
 
-      {/* PROGRESS */}
-      <section className="progress-section">
-        <div className="container">
-          <div className="progress-stats">
-            <div style={{ textAlign: 'center' }}>
-              <div className="stat-value">{formatCurrency(stats.total)}</div>
-              <div className="stat-label">Total arrecadado</div>
+      {/* MODAL */}
+      {isModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Apoiar esta Campanha</h2>
+              <button className="modal-close-btn" onClick={() => setIsModalOpen(false)}>&times;</button>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="stat-value">{stats.count}</div>
-              <div className="stat-label">Contribuições</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div className="stat-value">{formatCurrency(goalAmount)}</div>
-              <div className="stat-label">Meta da campanha</div>
-            </div>
-          </div>
-          <div className="progress-bar-wrap">
-            <div className="progress-bar-fill" style={{ width: `${progressPct}%` }} />
-          </div>
-          <div className="progress-meta">
-            <span>Progresso da arrecadação</span>
-            <span className="progress-pct">{progressPct.toFixed(1)}% da meta</span>
-          </div>
-        </div>
-      </section>
-
-      {/* STORY */}
-      <section className="story-section" id="historia">
-        <div className="container">
-          <div className="story-grid">
-            <div className="story-img-wrap">
-              <div className="story-img-accent" />
-              <div className="story-img">
-                {campaign.hero_image_url
-                  ? <img src={campaign.hero_image_url} alt="Lucianinha" />
-                  : <div className="story-img-placeholder">
-                      <svg xmlns="http://www.w3.org/2000/svg" style={{ width: 64, height: 64 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+            
+            <div className="modal-body">
+              {checkoutStep === 'form' && (
+                <form onSubmit={handleGeneratePix}>
+                  <div className="form-group">
+                    <label className="label">Selecione o valor do apoio</label>
+                    <div className="modal-amount-grid">
+                      {suggestedValues.map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          className={`modal-amount-btn${selectedAmount === val ? ' active' : ''}`}
+                          onClick={() => { setSelectedAmount(val); setCustomAmount('') }}
+                        >
+                          R$ {val}
+                        </button>
+                      ))}
                     </div>
-                }
-              </div>
-            </div>
+                  </div>
 
-            <div className="story-text-content">
-              <div className="story-eyebrow">
-                <span className="story-eyebrow-line" />
-                Nossa história
-              </div>
-              <h2>Conheça a Lucianinha</h2>
-              <div className="story-divider" />
-              {(campaign.story_text || '').split('\n').filter(Boolean).map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-              <blockquote className="story-quote">
-                "Com a sua ajuda, sonhos podem se tornar realidade. Obrigada por fazer parte da nossa corrente do bem."
-              </blockquote>
-              <button
-                className="btn btn-primary mt-4"
-                onClick={() => donationRef.current?.scrollIntoView({ behavior: 'smooth' })}
-              >
-                Fazer minha contribuição
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+                  <div className="form-group amount-custom-wrap">
+                    <span className="amount-currency">R$</span>
+                    <input
+                      type="number"
+                      className="input amount-custom"
+                      placeholder="Outro valor para contribuir"
+                      value={customAmount}
+                      min="1"
+                      step="0.01"
+                      onChange={e => { setCustomAmount(e.target.value); setSelectedAmount(null) }}
+                    />
+                  </div>
 
-      {/* DONATION FORM */}
-      <section className="donation-section" ref={donationRef as React.RefObject<HTMLElement>}>
-        <div className="container donation-inner" style={{ textAlign: 'center' }}>
-          <div className="donation-eyebrow" style={{ justifyContent: 'center' }}>
-            <span className="donation-eyebrow-line" />
-            Faça sua contribuição
-            <span className="donation-eyebrow-line" />
-          </div>
-          <h2 className="donation-title">Ajude a Lucianinha</h2>
-          <p className="donation-subtitle">
-            100% do valor é destinado diretamente à Lucianinha.<br />
-            Pagamento processado com segurança pelo MercadoPago.
-          </p>
+                  <div className="form-group" style={{ marginTop: '1.25rem' }}>
+                    <label className="label">Nome Completo *</label>
+                    <input
+                      className="input"
+                      placeholder="Seu nome"
+                      value={donorName}
+                      onChange={e => setDonorName(e.target.value)}
+                      required
+                    />
+                  </div>
 
-          <div className="donation-form-card">
-            <h3>Selecione o valor da contribuição</h3>
-            <form onSubmit={handleDonate}>
-              <div className="amount-grid">
-                {suggestedValues.map(val => (
-                  <button
-                    key={val}
-                    type="button"
-                    className={`amount-btn${selectedAmount === val ? ' active' : ''}`}
-                    onClick={() => { setSelectedAmount(val); setCustomAmount('') }}
-                  >
-                    {formatCurrency(val)}
+                  <div className="form-group">
+                    <label className="label">WhatsApp (com DDD) *</label>
+                    <input
+                      className="input input-whatsapp"
+                      type="tel"
+                      placeholder="(00) 00000-0000"
+                      value={donorPhone}
+                      onChange={e => setDonorPhone(maskPhone(e.target.value))}
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="label">Mensagem de apoio (opcional)</label>
+                    <textarea
+                      className="textarea"
+                      placeholder="Escreva uma mensagem carinhosa para a Lucianinha..."
+                      value={message}
+                      onChange={e => setMessage(e.target.value)}
+                      rows={2}
+                      style={{ minHeight: '60px' }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <input
+                      type="checkbox"
+                      id="anon_chk"
+                      checked={anonymous}
+                      onChange={e => setAnonymous(e.target.checked)}
+                      style={{ width: 'auto', accentColor: 'var(--vk-green)' }}
+                    />
+                    <label htmlFor="anon_chk" style={{ margin: 0, fontWeight: 400, fontSize: '0.85rem', color: 'var(--vk-gray)', cursor: 'pointer', textTransform: 'none' }}>
+                      Não exibir meu nome na lista pública de doadores
+                    </label>
+                  </div>
+
+                  {error && <div className="alert alert-error">{error}</div>}
+
+                  <button type="submit" className="btn-contribuir" style={{ marginTop: '1rem', width: '100%' }} disabled={loading}>
+                    {loading ? 'Gerando Pix...' : 'Confirmar e Gerar PIX'}
                   </button>
-                ))}
-              </div>
+                </form>
+              )}
 
-              <div className="form-group amount-custom-wrap" style={{ marginTop: '0.625rem' }}>
-                <span className="amount-currency">R$</span>
-                <input
-                  type="number"
-                  className="input amount-custom"
-                  placeholder="Outro valor"
-                  value={customAmount}
-                  min="1"
-                  step="0.01"
-                  onChange={e => { setCustomAmount(e.target.value); setSelectedAmount(null) }}
-                />
-              </div>
+              {checkoutStep === 'pix' && (
+                <div className="pix-container">
+                  <h3 className="pix-qr-title">Doação via Pix</h3>
+                  <p className="pix-qr-subtitle">Escaneie o código QR com o app do seu banco para doar R$ {getAmount().toFixed(2).replace('.', ',')}</p>
 
-              <div style={{ borderTop: '1px solid var(--gray-100)', paddingTop: '1.5rem', marginTop: '0.5rem' }}>
-                <div className="form-group">
-                  <label className="label">Nome completo *</label>
-                  <input className="input" placeholder="Seu nome" value={donorName} onChange={e => setDonorName(e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label className="label">E-mail</label>
-                  <input className="input" type="email" placeholder="seu@email.com" value={donorEmail} onChange={e => setDonorEmail(e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="label">Mensagem para a Lucianinha (opcional)</label>
-                  <textarea
-                    className="textarea"
-                    placeholder="Deixe uma mensagem de carinho..."
-                    value={message}
-                    onChange={e => setMessage(e.target.value)}
-                    rows={3}
-                    style={{ minHeight: '80px' }}
-                  />
-                </div>
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', textAlign: 'left' }}>
-                  <input type="checkbox" id="anon" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} style={{ width: 'auto', accentColor: 'var(--burgundy)' }} />
-                  <label htmlFor="anon" style={{ margin: 0, fontWeight: 400, fontSize: '0.875rem', color: 'var(--gray-600)', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
-                    Desejo fazer uma contribuição anônima
-                  </label>
-                </div>
-              </div>
+                  <div className="pix-qr-frame">
+                    {qrCodeBase64 ? (
+                      <img
+                        src={`data:image/png;base64,${qrCodeBase64}`}
+                        alt="QR Code Pix"
+                        className="pix-qr-img"
+                      />
+                    ) : (
+                      <div className="pix-spinner" style={{ width: 40, height: 40 }} />
+                    )}
+                  </div>
 
-              {error && <div className="alert alert-error">{error}</div>}
+                  <div className="pix-copia-cola-title">Pix Copia e Cola</div>
+                  <div className="pix-copia-cola-input-group">
+                    <input
+                      className="pix-copia-cola-input"
+                      readOnly
+                      value={qrCode}
+                      onClick={handleCopyPix}
+                    />
+                    <button className="btn-copiar-pix" onClick={handleCopyPix}>
+                      {copied ? 'Copiado!' : 'Copiar'}
+                    </button>
+                  </div>
 
-              <button type="submit" className="btn btn-primary btn-full btn-lg" disabled={loading}>
-                {loading
-                  ? 'Processando...'
-                  : `Contribuir ${getAmount() > 0 ? formatCurrency(getAmount()) : ''}`
-                }
-              </button>
-              <div className="secure-note">
-                <svg xmlns="http://www.w3.org/2000/svg" style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                Ambiente seguro — dados criptografados pelo MercadoPago
-              </div>
-            </form>
+                  <div className="pix-status-box">
+                    <div className="pix-spinner" />
+                    <span>Aguardando o pagamento...</span>
+                  </div>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--vk-gray)', marginTop: '0.8rem' }}>
+                    O sistema confirma a transação automaticamente. Não é preciso enviar comprovante.
+                  </p>
+                </div>
+              )}
+
+              {checkoutStep === 'success' && (
+                <div className="pix-success-box">
+                  <div className="pix-success-icon">✓</div>
+                  <h3 className="pix-success-title">Muito Obrigado!</h3>
+                  <p className="pix-success-text">
+                    Sua contribuição no valor de R$ {getAmount().toFixed(2).replace('.', ',')} foi confirmada.
+                    Ela será essencial para a cirurgia da Lucianinha.
+                  </p>
+                  <button className="btn-contribuir" onClick={() => setIsModalOpen(false)}>
+                    Concluir
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </section>
-
-      {/* DONORS */}
-      {donations.length > 0 && (
-        <section className="donors-section">
-          <div className="container">
-            <div className="section-title-wrap">
-              <div className="section-eyebrow" style={{ justifyContent: 'center' }}>
-                <span className="section-eyebrow-line" />
-                Quem já contribuiu
-                <span className="section-eyebrow-line" />
-              </div>
-              <h2>Nossos Apoiadores</h2>
-              <p style={{ marginTop: '0.5rem', color: 'var(--gray-400)' }}>Cada contribuição faz a diferença</p>
-            </div>
-            <div className="donors-grid">
-              {donations.map(d => (
-                <div key={d.id} className="donor-card">
-                  <div className="donor-avatar">
-                    {(d.anonymous ? '?' : d.donor_name[0] || '?').toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="donor-name">{d.anonymous ? 'Apoiador Anônimo' : d.donor_name}</div>
-                    <div className="donor-amount">{formatCurrency(d.amount)}</div>
-                    {d.message && <div className="donor-msg">"{d.message}"</div>}
-                    <div className="donor-time">{timeAgo(d.created_at)}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       )}
 
       {/* FOOTER */}
-      <footer className="footer">
-        <div className="container">
-          <div className="footer-logo">Corrente do Bem</div>
-          <p className="footer-text">Feito com carinho para a Lucianinha. Toda doação conta.</p>
+      <footer className="vk-footer">
+        <div className="vk-footer-container">
+          <div className="vk-footer-about">
+            <a href="/" className="vk-footer-logo">
+              <div className="vk-footer-logo-heart">✦</div>
+              Corrente do Bem
+            </a>
+            <p>
+              Iniciativa de amigos e familiares para apoiar a Lucianinha no tratamento de saúde.
+            </p>
+          </div>
+          <div className="vk-footer-links">
+            <a href="/admin/login" className="vk-footer-link">Painel Administrativo</a>
+            <a href="/" className="vk-footer-link">Ver Campanha</a>
+          </div>
+        </div>
+        <div className="vk-footer-copyright">
+          © {new Date().getFullYear()} Corrente do Bem. Todos os direitos reservados.
         </div>
       </footer>
     </>

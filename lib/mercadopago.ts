@@ -53,8 +53,54 @@ export async function createDonationPreference(
   return result
 }
 
+export interface DonationPixData {
+  donorName: string
+  donorPhone: string
+  amount: number
+  donationId: string
+}
+
+export async function createPixPayment(
+  accessToken: string,
+  data: DonationPixData
+) {
+  const client = getMercadoPagoClient(accessToken)
+  const payment = new Payment(client)
+
+  // Separar nome e sobrenome
+  const nameParts = data.donorName.trim().split(/\s+/)
+  const firstName = nameParts[0]
+  const lastName = nameParts.slice(1).join(' ') || 'Doador'
+
+  // Limpar telefone
+  const cleanPhone = data.donorPhone.replace(/\D/g, '')
+  const areaCode = cleanPhone.slice(0, 2) || '11'
+  const number = cleanPhone.slice(2) || '999999999'
+
+  const response = await payment.create({
+    body: {
+      transaction_amount: data.amount,
+      description: 'Doação - Cirurgia Lucianinha',
+      payment_method_id: 'pix',
+      payer: {
+        email: `doador_${cleanPhone}@correntedebem.com.br`,
+        first_name: firstName,
+        last_name: lastName,
+        phone: {
+          area_code: areaCode,
+          number: number
+        }
+      },
+      external_reference: data.donationId,
+    }
+  })
+
+  return response
+}
+
 export async function getPaymentInfo(accessToken: string, paymentId: string) {
   const client = getMercadoPagoClient(accessToken)
   const payment = new Payment(client)
   return await payment.get({ id: paymentId })
 }
+
