@@ -11,14 +11,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
-    const { data, error } = await supabaseAdmin.from('campaign').select('*').single()
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(null) // Tabela vazia
-      }
-      throw error
-    }
-    return NextResponse.json(data)
+    const { data, error } = await supabaseAdmin
+      .from('campaign')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+
+    if (error) throw error
+    return NextResponse.json(data?.[0] ?? null)
   } catch (err: any) {
     console.error('campaign GET error:', err)
     return NextResponse.json({ error: err.message || 'Erro ao buscar dados da campanha' }, { status: 500 })
@@ -39,50 +39,60 @@ export async function PUT(request: NextRequest) {
 
     const cleanDeadline = deadline && deadline.trim() !== '' ? deadline : null
 
-    const { data: existing, error: findError } = await supabaseAdmin.from('campaign').select('id').single()
-    
-    // Tratamos erro de linha não encontrada sem crashar
-    const hasExisting = existing && !findError
+    // Busca a linha mais recente (sem .single() para não quebrar com múltiplas linhas)
+    const { data: rows, error: findError } = await supabaseAdmin
+      .from('campaign')
+      .select('id')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+
+    if (findError) throw findError
+
+    const existingId = rows?.[0]?.id
 
     let result
-    if (hasExisting && existing?.id) {
+    if (existingId) {
+      // Sempre atualiza a linha mais recente
       const { data, error } = await supabaseAdmin
         .from('campaign')
-        .update({ 
-          name, 
-          goal_amount, 
-          deadline: cleanDeadline, 
-          status, 
-          story_title, 
-          story_text, 
-          cta_text, 
-          suggested_values, 
-          hero_image_url, 
-          updated_at: new Date().toISOString() 
+        .update({
+          name,
+          goal_amount,
+          deadline: cleanDeadline,
+          status,
+          story_title,
+          story_text,
+          cta_text,
+          suggested_values,
+          hero_image_url,
+          updated_at: new Date().toISOString()
         })
-        .eq('id', existing.id)
+        .eq('id', existingId)
         .select()
-        .single()
+        .limit(1)
+
       if (error) throw error
-      result = data
+      result = data?.[0]
     } else {
+      // Só insere se a tabela estiver completamente vazia
       const { data, error } = await supabaseAdmin
         .from('campaign')
-        .insert({ 
-          name, 
-          goal_amount, 
-          deadline: cleanDeadline, 
-          status, 
-          story_title, 
-          story_text, 
-          cta_text, 
-          suggested_values, 
-          hero_image_url 
+        .insert({
+          name,
+          goal_amount,
+          deadline: cleanDeadline,
+          status,
+          story_title,
+          story_text,
+          cta_text,
+          suggested_values,
+          hero_image_url
         })
         .select()
-        .single()
+        .limit(1)
+
       if (error) throw error
-      result = data
+      result = data?.[0]
     }
 
     return NextResponse.json(result)
