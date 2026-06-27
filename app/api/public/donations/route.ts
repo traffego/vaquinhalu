@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-function getAnonClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET() {
   try {
-    const supabase = getAnonClient()
-
-    // Busca doações aprovadas (RLS permite leitura pública de status=approved)
-    const { data: donations, error: donErr } = await supabase
+    // Busca doações aprovadas
+    const { data: donations, error: donErr } = await supabaseAdmin
       .from('donations')
       .select('id, donor_name, amount, message, anonymous, created_at')
       .eq('status', 'approved')
@@ -22,8 +13,8 @@ export async function GET() {
 
     if (donErr) throw donErr
 
-    // Total arrecadado: soma todas as doações aprovadas
-    const { data: totals, error: totErr } = await supabase
+    // Total arrecadado
+    const { data: totals, error: totErr } = await supabaseAdmin
       .from('donations')
       .select('amount')
       .eq('status', 'approved')

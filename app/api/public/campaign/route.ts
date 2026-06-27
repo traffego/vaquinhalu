@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-function getAnonClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET() {
   try {
-    const supabase = getAnonClient()
-    const { data, error } = await supabase.from('campaign').select('*').single()
+    const { data, error } = await supabaseAdmin.from('campaign').select('*').single()
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json({}) // Retorna objeto vazio se a tabela estiver vazia
+        return NextResponse.json({})
       }
       throw error
     }
