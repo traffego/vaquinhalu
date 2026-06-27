@@ -107,17 +107,6 @@ export default function AdminConfiguracoes() {
             <p className="form-hint">Encontre em: MercadoPago → Configurações → Credenciais</p>
           </div>
 
-          <div className="form-group">
-            <label className="label">Public Key (chave pública)</label>
-            <input
-              className="input"
-              placeholder="APP_USR-xxxx..."
-              value={mpPublicKey}
-              onChange={e => setMpPublicKey(e.target.value)}
-            />
-            <p className="form-hint">Usada no frontend para iniciar o checkout.</p>
-          </div>
-
           {success && <div className="alert alert-success">✅ Configurações salvas com sucesso!</div>}
           {error && <div className="alert alert-error">❌ {error}</div>}
 
@@ -128,27 +117,27 @@ export default function AdminConfiguracoes() {
       </div>
 
       <div className="admin-card">
-        <div className="admin-card-title">🔗 URL do Webhook</div>
-        <p style={{ fontSize: '0.9rem', color: 'var(--gray-600)', marginBottom: '1rem' }}>
-          Configure esta URL nas notificações do MercadoPago para atualizar o status das doações automaticamente:
+        <div className="admin-card-title">🔗 URL do Webhook (Opcional)</div>
+        <p style={{ fontSize: '0.9rem', color: 'var(--vk-gray)', marginBottom: '1rem' }}>
+          O sistema já possui confirmação Pix em tempo real por consulta direta à API.
+          Caso deseje ativar notificações automáticas por e-mail quando o doador fechar a janela antes do Pix ser pago, configure esta URL no MercadoPago:
         </p>
-        <div style={{ background: 'var(--gray-100)', padding: '0.875rem 1rem', borderRadius: 'var(--radius-sm)', fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--purple-700)', wordBreak: 'break-all' }}>
+        <div style={{ background: 'var(--vk-light-gray)', padding: '0.875rem 1rem', borderRadius: 'var(--radius)', fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--vk-green)', wordBreak: 'break-all', border: '1px solid var(--vk-border)' }}>
           {appUrl}/api/payment/webhook
         </div>
         <p className="form-hint" style={{ marginTop: '0.75rem' }}>
-          MercadoPago → Configurações → Notificações → URL de notificação instantânea (IPN)
+          MercadoPago → Suas Integrações → Configurações → Notificações Webhooks
         </p>
       </div>
 
       <div className="admin-card">
         <div className="admin-card-title">📋 Como configurar</div>
-        <ol style={{ paddingLeft: '1.5rem', color: 'var(--gray-600)', lineHeight: 2 }}>
-          <li>Acesse <strong>mercadopago.com.br</strong> e faça login</li>
-          <li>Vá em <strong>Configurações → Credenciais</strong></li>
-          <li>Copie o <strong>Access Token</strong> e a <strong>Public Key</strong></li>
-          <li>Cole acima e salve</li>
-          <li>Configure a URL do webhook no painel do MercadoPago</li>
-          <li>Teste com o modo <strong>Sandbox</strong> antes de ir para produção</li>
+        <ol style={{ paddingLeft: '1.5rem', color: 'var(--vk-gray)', lineHeight: 2 }}>
+          <li>Acesse <strong>mercadopago.com.br/developers</strong> e faça login</li>
+          <li>Vá em <strong>Suas Integrações</strong> e selecione/crie sua aplicação</li>
+          <li>Acesse a aba <strong>Credenciais de Produção</strong> ou <strong>Credenciais de Teste</strong></li>
+          <li>Copie apenas o seu <strong>Access Token</strong> (chave secreta) e cole no formulário acima</li>
+          <li>Selecione o modo correspondente (Sandbox para teste, Produção para valer) e salve!</li>
         </ol>
       </div>
     </>
