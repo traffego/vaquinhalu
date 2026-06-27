@@ -145,14 +145,22 @@ export default function Home() {
   async function loadData() {
     try {
       const [campRes, donaRes] = await Promise.allSettled([
-        fetch('/api/public/campaign').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/public/donations').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/public/campaign').then(async r => {
+          const json = await r.json()
+          console.log('[loadData] campaign response:', r.status, json)
+          return r.ok ? json : null
+        }).catch(err => { console.error('[loadData] campaign fetch error:', err); return null }),
+        fetch('/api/public/donations').then(async r => {
+          const json = await r.json()
+          console.log('[loadData] donations response:', r.status, json)
+          return r.ok ? json : null
+        }).catch(err => { console.error('[loadData] donations fetch error:', err); return null }),
       ])
 
-      if (campRes.status === 'fulfilled' && campRes.value && Object.keys(campRes.value).length > 0) {
+      if (campRes.status === 'fulfilled' && campRes.value && !campRes.value.error) {
         setCampaign(prev => ({ ...prev, ...campRes.value }))
       }
-      if (donaRes.status === 'fulfilled' && donaRes.value) {
+      if (donaRes.status === 'fulfilled' && donaRes.value && !donaRes.value.error) {
         const d = donaRes.value
         setDonations(d.donations || [])
         setStats({ total: d.total || 0, count: d.count || 0 })
