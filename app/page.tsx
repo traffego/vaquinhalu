@@ -40,8 +40,20 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(hrs / 24)}d atrás`
 }
 
+// Dados padrão — página carrega imediatamente sem travar
+const DEFAULT_CAMPAIGN: Campaign = {
+  name: 'Ajuda Lucianinha',
+  goal_amount: 15000,
+  story_title: 'Juntos pela Lucianinha',
+  story_text: 'A Lucianinha é uma pessoa incrível que encheu nossas vidas de alegria e carinho. Agora ela precisa de nós. Ela está enfrentando um momento muito difícil e precisa realizar uma cirurgia para recuperar sua saúde e qualidade de vida. Cada contribuição, por menor que seja, faz uma diferença enorme. Seja parte dessa corrente do bem e ajude nossa querida amiga a sorrir novamente.',
+  hero_image_url: null,
+  cta_text: 'Quero contribuir',
+  suggested_values: '10,25,50,100,200,500',
+  status: 'active',
+}
+
 export default function Home() {
-  const [campaign, setCampaign] = useState<Campaign | null>(null)
+  const [campaign, setCampaign] = useState<Campaign>(DEFAULT_CAMPAIGN)
   const [stats, setStats] = useState<Stats>({ total: 0, count: 0 })
   const [donations, setDonations] = useState<Donation[]>([])
   const [mpMode, setMpMode] = useState('sandbox')
@@ -61,29 +73,32 @@ export default function Home() {
 
   async function loadData() {
     try {
-      const [campRes, donaRes, configRes] = await Promise.all([
-        fetch('/api/public/campaign'),
-        fetch('/api/public/donations'),
-        fetch('/api/public/config'),
+      const [campRes, donaRes, configRes] = await Promise.allSettled([
+        fetch('/api/public/campaign').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/public/donations').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/public/config').then(r => r.ok ? r.json() : null).catch(() => null),
       ])
-      if (campRes.ok) setCampaign(await campRes.json())
-      if (donaRes.ok) {
-        const d = await donaRes.json()
+
+      if (campRes.status === 'fulfilled' && campRes.value) {
+        setCampaign(prev => ({ ...prev, ...campRes.value }))
+      }
+      if (donaRes.status === 'fulfilled' && donaRes.value) {
+        const d = donaRes.value
         setDonations(d.donations || [])
         setStats({ total: d.total || 0, count: d.count || 0 })
       }
-      if (configRes.ok) {
-        const c = await configRes.json()
+      if (configRes.status === 'fulfilled' && configRes.value) {
+        const c = configRes.value
         setMpMode(c.mp_mode || 'sandbox')
       }
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error('loadData error:', e) }
   }
 
-  const suggestedValues = campaign?.suggested_values
+  const suggestedValues = campaign.suggested_values
     ? campaign.suggested_values.split(',').map(Number).filter(Boolean)
     : [10, 25, 50, 100, 200, 500]
 
-  const goalAmount = campaign?.goal_amount || 15000
+  const goalAmount = campaign.goal_amount || 15000
   const progressPct = Math.min((stats.total / goalAmount) * 100, 100)
 
   const getAmount = () => {
@@ -118,15 +133,6 @@ export default function Home() {
       setLoading(false)
     }
   }
-
-  if (!campaign) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gradient-hero)' }}>
-      <div style={{ color: 'rgba(255,255,255,0.6)', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
-        <div style={{ width: 40, height: 40, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 1rem' }} />
-        <p style={{ fontSize: '0.875rem' }}>Carregando...</p>
-      </div>
-    </div>
-  )
 
   return (
     <>
